@@ -42,7 +42,7 @@ jobs:
           path: C:\Users\devops-test2\Documents\publish
 
       - name: Deploy to IIS
-        shell: pwsh
+        shell: powershell
         run: |
           Import-Module WebAdministration
 
