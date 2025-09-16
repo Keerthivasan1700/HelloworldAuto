@@ -95,6 +95,3 @@ jobs:
           else {
               New-Website -Name $siteName -Port $port -PhysicalPath $sitePath -ApplicationPool $appPool
           }
-          
-          # Start Website
-          Start-Website -Name $siteName
