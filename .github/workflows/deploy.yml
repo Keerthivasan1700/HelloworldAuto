@@ -44,31 +44,33 @@ jobs:
       - name: Deploy to IIS
         shell: powershell
         run: |
+          
           Import-Module WebAdministration
 
           $appPool = "HelloWorldAuto"
           $siteName = "HelloWorldAuto"
-          $sitePath = "C:\Users\devops-test2\Documents\GitHub\Helloworldfinal"
+          $sitePath = "C:\inetpub\wwwroot\HelloWorldAuto"
           $port = 8081
 
           # Create App Pool if not exists
-          if (-not (Get-WebAppPoolState -Name $appPool -ErrorAction SilentlyContinue)) {
+          if (-not (Test-Path "IIS:\AppPools\$appPool")) {
               New-WebAppPool -Name $appPool
               Set-ItemProperty IIS:\AppPools\$appPool -Name processModel.identityType -Value ApplicationPoolIdentity
           }
 
           # Create Site if not exists
-          if (-not (Test-Path IIS:\Sites\$siteName)) {
+          if (-not (Test-Path "IIS:\Sites\$siteName")) {
               New-Website -Name $siteName -Port $port -PhysicalPath $sitePath -ApplicationPool $appPool
           } else {
               Stop-Website -Name $siteName
           }
 
           # Deploy files
-          if (Test-Path $sitePath) { Remove-Item $sitePath\* -Recurse -Force }
-          Copy-Item "C:\deploy\HelloWorldAuto\*" $sitePath -Recurse
+          if (Test-Path $sitePath) { Remove-Item "$sitePath\*" -Recurse -Force }
+          Copy-Item "C:\Users\devops-test2\Documents\publish\*" $sitePath -Recurse
 
           # Start site
           Start-Website -Name $siteName
 
           Write-Output "✅ Deployed HelloWorldAuto at http://localhost:$port/"
+
