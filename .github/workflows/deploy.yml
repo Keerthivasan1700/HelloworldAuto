@@ -78,7 +78,7 @@ jobs:
               Set-ItemProperty "IIS:\Sites\$siteName" -Name applicationPool -Value $appPool
 
               # Ensure binding is unique
-              $existingBinding = Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -eq "*:$port:" }
+              $existingBinding = Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -eq "*:${port}:" }
               if (-not $existingBinding) {
                   New-WebBinding -Name $siteName -Protocol "http" -Port $port -IPAddress "*"
               }
