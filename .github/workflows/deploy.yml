@@ -72,11 +72,20 @@ jobs:
           Copy-Item "C:\Users\devops-test2\Documents\publish\*" $sitePath -Recurse
 
           # Create or update IIS Website
+
           if (Test-Path "IIS:\Sites\$siteName") {
-              Stop-Website -Name $siteName
+              try {
+                  $state = (Get-Website -Name $siteName).State
+                  if ($state -eq "Started") {
+                      Stop-Website -Name $siteName
+                  }
+              } catch {
+                  Write-Host "Skipping Stop-Website, site not in a valid state."
+              }
+          
               Set-ItemProperty "IIS:\Sites\$siteName" -Name physicalPath -Value $sitePath
               Set-ItemProperty "IIS:\Sites\$siteName" -Name applicationPool -Value $appPool
-
+          
               # Ensure binding is unique
               $existingBinding = Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -eq "*:${port}:" }
               if (-not $existingBinding) {
@@ -86,6 +95,6 @@ jobs:
           else {
               New-Website -Name $siteName -Port $port -PhysicalPath $sitePath -ApplicationPool $appPool
           }
-
+          
           # Start Website
           Start-Website -Name $siteName
