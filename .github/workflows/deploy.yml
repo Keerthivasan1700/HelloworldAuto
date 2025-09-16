@@ -29,7 +29,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: HelloWorldAuto-publish
-          path: C:\Users\devops-test2\Documents\publish
+          path: ./publish
 
   deploy:
     runs-on: self-hosted   # Windows server with IIS + admin rights
