@@ -2,11 +2,13 @@ name: Build and Deploy HelloWorldAuto
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -14,16 +16,16 @@ jobs:
       - name: Setup .NET 6
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: 6.0.x
 
       - name: Restore dependencies
-        run: dotnet restore HelloWorldAuto.csproj
+        run: dotnet restore HelloWorldAuto/HelloWorldAuto.csproj
 
       - name: Build
-        run: dotnet build HelloWorldAuto.csproj --configuration Release --no-restore
+        run: dotnet build HelloWorldAuto/HelloWorldAuto.csproj --configuration Release --no-restore
 
       - name: Publish
-        run: dotnet publish HelloWorldAuto.csproj -c Release -o ./publish
+        run: dotnet publish HelloWorldAuto/HelloWorldAuto.csproj -c Release -o ./publish
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -32,7 +34,7 @@ jobs:
           path: ./publish
 
   deploy:
-    runs-on: self-hosted   # Windows server with IIS + admin rights
+    runs-on: self-hosted   # Windows Server with IIS
     needs: build
     steps:
       - name: Download artifact
@@ -42,35 +44,50 @@ jobs:
           path: C:\Users\devops-test2\Documents\publish
 
       - name: Deploy to IIS
-        shell: powershell
+        shell: pwsh
         run: |
-          
           Import-Module WebAdministration
 
-          $appPool = "HelloWorldAuto"
-          $siteName = "HelloWorldAuto"
-          $sitePath = "C:\inetpub\wwwroot\HelloWorldAuto"
-          $port = 8081
+          $appPool   = "HelloWorldAuto"
+          $siteName  = "HelloWorldAuto"
+          $sitePath  = "C:\inetpub\wwwroot\HelloWorldAuto"
+          $port      = 8081
 
-          # Create App Pool if not exists
+          # Create or update App Pool
           if (-not (Test-Path "IIS:\AppPools\$appPool")) {
               New-WebAppPool -Name $appPool
-              Set-ItemProperty IIS:\AppPools\$appPool -Name processModel.identityType -Value ApplicationPoolIdentity
+          }
+          Set-ItemProperty "IIS:\AppPools\$appPool" -Name managedRuntimeVersion -Value "v6.0"
+          Start-WebAppPool -Name $appPool
+
+          # Create site folder if not exists
+          if (-not (Test-Path $sitePath)) {
+              New-Item -ItemType Directory -Path $sitePath | Out-Null
           }
 
-          # Create Site if not exists
-          if (-not (Test-Path "IIS:\Sites\$siteName")) {
-              New-Website -Name $siteName -Port $port -PhysicalPath $sitePath -ApplicationPool $appPool
-          } else {
-              Stop-Website -Name $siteName
+          # Clear old files
+          if (Test-Path $sitePath) {
+              Remove-Item "$sitePath\*" -Recurse -Force
           }
 
-          # Deploy files
-          if (Test-Path $sitePath) { Remove-Item "$sitePath\*" -Recurse -Force }
+          # Copy new publish files
           Copy-Item "C:\Users\devops-test2\Documents\publish\*" $sitePath -Recurse
 
-          # Start site
+          # Create or update IIS Website
+          if (Test-Path "IIS:\Sites\$siteName") {
+              Stop-Website -Name $siteName
+              Set-ItemProperty "IIS:\Sites\$siteName" -Name physicalPath -Value $sitePath
+              Set-ItemProperty "IIS:\Sites\$siteName" -Name applicationPool -Value $appPool
+
+              # Ensure binding is unique
+              $existingBinding = Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -eq "*:$port:" }
+              if (-not $existingBinding) {
+                  New-WebBinding -Name $siteName -Protocol "http" -Port $port -IPAddress "*"
+              }
+          }
+          else {
+              New-Website -Name $siteName -Port $port -PhysicalPath $sitePath -ApplicationPool $appPool
+          }
+
+          # Start Website
           Start-Website -Name $siteName
-
-          Write-Output "✅ Deployed HelloWorldAuto at http://localhost:$port/"
-
