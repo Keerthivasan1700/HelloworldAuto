@@ -2,13 +2,11 @@ name: Build and Deploy HelloWorldAuto
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,16 +14,16 @@ jobs:
       - name: Setup .NET 6
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 6.0.x
+          dotnet-version: '6.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore HelloWorldAuto/HelloWorldAuto.csproj
+        run: dotnet restore HelloWorldAuto.csproj
 
       - name: Build
-        run: dotnet build HelloWorldAuto/HelloWorldAuto.csproj --configuration Release --no-restore
+        run: dotnet build HelloWorldAuto.csproj --configuration Release --no-restore
 
       - name: Publish
-        run: dotnet publish HelloWorldAuto/HelloWorldAuto.csproj -c Release -o ./publish
+        run: dotnet publish HelloWorldAuto.csproj -c Release -o ./publish
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
