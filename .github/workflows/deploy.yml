@@ -1,0 +1,74 @@
+name: Build and Deploy HelloWorldAuto
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 6
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore HelloWorldAuto.csproj
+
+      - name: Build
+        run: dotnet build HelloWorldAuto.csproj --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish HelloWorldAuto.csproj -c Release -o ./publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HelloWorldAuto-publish
+          path: C:\Users\devops-test2\Documents\publish
+
+  deploy:
+    runs-on: self-hosted   # Windows server with IIS + admin rights
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: HelloWorldAuto-publish
+          path: C:\Users\devops-test2\Documents\publish
+
+      - name: Deploy to IIS
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+
+          $appPool = "HelloWorldAuto"
+          $siteName = "HelloWorldAuto"
+          $sitePath = "C:\Users\devops-test2\Documents\GitHub\Helloworldfinal"
+          $port = 8081
+
+          # Create App Pool if not exists
+          if (-not (Get-WebAppPoolState -Name $appPool -ErrorAction SilentlyContinue)) {
+              New-WebAppPool -Name $appPool
+              Set-ItemProperty IIS:\AppPools\$appPool -Name processModel.identityType -Value ApplicationPoolIdentity
+          }
+
+          # Create Site if not exists
+          if (-not (Test-Path IIS:\Sites\$siteName)) {
+              New-Website -Name $siteName -Port $port -PhysicalPath $sitePath -ApplicationPool $appPool
+          } else {
+              Stop-Website -Name $siteName
+          }
+
+          # Deploy files
+          if (Test-Path $sitePath) { Remove-Item $sitePath\* -Recurse -Force }
+          Copy-Item "C:\deploy\HelloWorldAuto\*" $sitePath -Recurse
+
+          # Start site
+          Start-Website -Name $siteName
+
+          Write-Output "✅ Deployed HelloWorldAuto at http://localhost:$port/"
