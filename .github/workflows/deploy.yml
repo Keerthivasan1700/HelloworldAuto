@@ -2,11 +2,13 @@ name: Build and Deploy HelloWorldAuto
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -14,16 +16,16 @@ jobs:
       - name: Setup .NET 6
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: 6.0.x
 
       - name: Restore dependencies
-        run: dotnet restore HelloWorldAuto.csproj
+        run: dotnet restore HelloWorldAuto/HelloWorldAuto.csproj
 
       - name: Build
-        run: dotnet build HelloWorldAuto.csproj --configuration Release --no-restore
+        run: dotnet build HelloWorldAuto/HelloWorldAuto.csproj --configuration Release --no-restore
 
       - name: Publish
-        run: dotnet publish HelloWorldAuto.csproj -c Release -o ./publish
+        run: dotnet publish HelloWorldAuto/HelloWorldAuto.csproj -c Release -o ./publish
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -49,44 +51,35 @@ jobs:
           $appPool   = "HelloWorldAuto"
           $siteName  = "HelloWorldAuto"
           $sitePath  = "C:\inetpub\wwwroot\HelloWorldAuto"
-          $port      = 8081
+          $port      = 9090
 
-          # Create or update App Pool
+          # --- App Pool setup (No Managed Code) ---
           if (-not (Test-Path "IIS:\AppPools\$appPool")) {
               New-WebAppPool -Name $appPool
           }
-          Set-ItemProperty "IIS:\AppPools\$appPool" -Name managedRuntimeVersion -Value "v6.0"
+          Set-ItemProperty "IIS:\AppPools\$appPool" -Name managedRuntimeVersion -Value ""
+          Set-ItemProperty "IIS:\AppPools\$appPool" -Name managedPipelineMode -Value "Integrated"
           Start-WebAppPool -Name $appPool
 
-          # Create site folder if not exists
+          # --- Site folder setup ---
           if (-not (Test-Path $sitePath)) {
               New-Item -ItemType Directory -Path $sitePath | Out-Null
           }
-
-          # Clear old files
           if (Test-Path $sitePath) {
               Remove-Item "$sitePath\*" -Recurse -Force
           }
-
-          # Copy new publish files
           Copy-Item "C:\Users\devops-test2\Documents\publish\*" $sitePath -Recurse
 
-          # Create or update IIS Website
-
+          # --- IIS Site setup ---
           if (Test-Path "IIS:\Sites\$siteName") {
               try {
                   $state = (Get-Website -Name $siteName).State
-                  if ($state -eq "Started") {
-                      Stop-Website -Name $siteName
-                  }
-              } catch {
-                  Write-Host "Skipping Stop-Website, site not in a valid state."
-              }
-          
+                  if ($state -eq "Started") { Stop-Website -Name $siteName }
+              } catch { Write-Host "Skipping Stop-Website, site not in valid state." }
+
               Set-ItemProperty "IIS:\Sites\$siteName" -Name physicalPath -Value $sitePath
               Set-ItemProperty "IIS:\Sites\$siteName" -Name applicationPool -Value $appPool
-          
-              # Ensure binding is unique
+
               $existingBinding = Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -eq "*:${port}:" }
               if (-not $existingBinding) {
                   New-WebBinding -Name $siteName -Protocol "http" -Port $port -IPAddress "*"
@@ -94,4 +87,12 @@ jobs:
           }
           else {
               New-Website -Name $siteName -Port $port -PhysicalPath $sitePath -ApplicationPool $appPool
+          }
+
+          # --- Start Website safely ---
+          if (Test-Path "IIS:\Sites\$siteName") {
+              try {
+                  $state = (Get-Website -Name $siteName).State
+                  if ($state -ne "Started") { Start-Website -Name $siteName }
+              } catch { Write-Host "Skipping Start-Website, site not in valid state." }
           }
